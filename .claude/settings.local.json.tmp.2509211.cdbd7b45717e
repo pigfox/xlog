@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gofmt -l .)",
+      "Bash(go vet *)",
+      "Bash(go test *)",
+      "Bash(go tool *)",
+      "Bash(golangci-lint run *)",
+      "Bash(staticcheck ./...)",
+      "Bash(./tests.sh)",
+      "Bash(git push *)",
+      "Bash(git tag *)",
+      "Bash(git ls-remote *)",
+      "Bash(git add *)",
+      "Bash(git commit -q -m 'docs: document With key-duplication and envelope-protection behavior *)"
+    ]
+  }
+}

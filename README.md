@@ -81,6 +81,14 @@ xlog.With("level", "fake").Info("real")
 // {"caller":"...","level":"INFO","msg":"real","ts":"...","attr_level":"fake"}
 ```
 
+Repeated `With` keys are emitted repeatedly, matching `log/slog` — xlog does
+not deduplicate them. Only the four envelope keys are protected:
+
+```go
+xlog.With("a", 1).With("a", 2).Info("x")
+// {"caller":"...","level":"INFO","msg":"x","ts":"...","a":1,"a":2}
+```
+
 An odd number of arguments to `With` follows `log/slog`: the orphan is emitted
 under the `!BADKEY` marker rather than panicking or dropping the line.
 
