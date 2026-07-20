@@ -170,8 +170,22 @@ func (g *Logger) Errorf(format string, a ...any) { emit(g.l, LevelError, fmt.Spr
 
 // ---- caller resolution ----
 
-// callerKey is the envelope key holding the resolved call site.
-const callerKey = "caller"
+// Envelope keys. These four are always emitted first, in this order.
+const (
+	callerKey = "caller"
+	levelKey  = "level"
+	msgKey    = "msg"
+	tsKey     = "ts"
+
+	// attrPrefix disambiguates a With attribute whose key would otherwise
+	// collide with an envelope key.
+	attrPrefix = "attr_"
+)
+
+// reserved reports whether k is an envelope key.
+func reserved(k string) bool {
+	return k == callerKey || k == levelKey || k == msgKey || k == tsKey
+}
 
 func callerAttr() slog.Attr {
 	file, line := callerFileLine()
@@ -248,11 +262,18 @@ func (h *orderedHandler) Handle(_ context.Context, r slog.Record) error {
 	attrs := make([]slog.Attr, 0, 4+len(h.attrs))
 	attrs = append(attrs,
 		slog.String(callerKey, caller),
-		slog.String("level", r.Level.String()),
-		slog.String("msg", r.Message),
-		slog.String("ts", r.Time.Format(time.RFC3339Nano)),
+		slog.String(levelKey, r.Level.String()),
+		slog.String(msgKey, r.Message),
+		slog.String(tsKey, r.Time.Format(time.RFC3339Nano)),
 	)
-	attrs = append(attrs, h.attrs...)
+	for _, a := range h.attrs {
+		// The envelope wins: a colliding With key is renamed rather than
+		// emitted twice, so the line never carries duplicate JSON keys.
+		if reserved(a.Key) {
+			a.Key = attrPrefix + a.Key
+		}
+		attrs = append(attrs, a)
+	}
 
 	b, err := encodeLine(attrs)
 	if err != nil {

@@ -244,6 +244,137 @@ func TestLoggerCallerPointsAtCallSite(t *testing.T) {
 	}
 }
 
+// ---- reserved keys / malformed kv ----
+
+// TestReservedKeysDoNotClobberEnvelope pins that a With key colliding with an
+// envelope key is renamed, never emitted twice. Duplicate JSON keys would let
+// the last value win in most parsers, silently overwriting the envelope.
+func TestReservedKeysDoNotClobberEnvelope(t *testing.T) {
+	const (
+		fakeLevel  = "fake"
+		spoofMsg   = "spoof"
+		hax        = "hax"
+		realMsg    = "real"
+		attrLevel  = attrPrefix + keyLevel
+		attrMsg    = attrPrefix + keyMsg
+		attrCaller = attrPrefix + keyCaller
+		attrTs     = attrPrefix + keyTs
+	)
+
+	var buf bytes.Buffer
+	Init(&buf)
+
+	With(keyLevel, fakeLevel, keyMsg, spoofMsg, keyCaller, hax, keyTs, hax).Info(realMsg)
+
+	line := readOneLine(t, &buf)
+
+	// No key may appear twice in the raw line.
+	for _, k := range []string{keyCaller, keyLevel, keyMsg, keyTs} {
+		if got := strings.Count(line, `"`+k+`":`); got != 1 {
+			t.Fatalf("key %q appears %d times, want 1; line=%s", k, got, line)
+		}
+	}
+
+	// Envelope holds the real values.
+	assertField(t, line, keyLevel, lvlInfo)
+	assertField(t, line, keyMsg, realMsg)
+	if got := asString(parseJSONLine(t, line)[keyCaller]); !regexp.MustCompile(callerRe).MatchString(got) {
+		t.Fatalf("caller was clobbered: %q", got)
+	}
+
+	// Colliding attrs survive under prefixed keys.
+	assertField(t, line, attrLevel, fakeLevel)
+	assertField(t, line, attrMsg, spoofMsg)
+	assertField(t, line, attrCaller, hax)
+	assertField(t, line, attrTs, hax)
+
+	assertKeyOrder(t, line, keyCaller, keyLevel, keyMsg, keyTs, attrLevel, attrMsg)
+}
+
+// TestNonReservedKeysAreNotRenamed guards against over-eager prefixing.
+func TestNonReservedKeysAreNotRenamed(t *testing.T) {
+	var buf bytes.Buffer
+	Init(&buf)
+
+	With(kvKey2, kvVal2).Info(msgHello)
+
+	line := readOneLine(t, &buf)
+	if strings.Contains(line, attrPrefix) {
+		t.Fatalf("non-reserved key should not be prefixed; line=%s", line)
+	}
+	assertField(t, line, kvKey2, kvVal2)
+}
+
+func TestReserved(t *testing.T) {
+	tests := []struct {
+		key  string
+		want bool
+	}{
+		{keyCaller, true},
+		{keyLevel, true},
+		{keyMsg, true},
+		{keyTs, true},
+		{kvKey, false},
+		{attrPrefix + keyLevel, false},
+	}
+	for _, tt := range tests {
+		if got := reserved(tt.key); got != tt.want {
+			t.Fatalf("reserved(%q) = %v, want %v", tt.key, got, tt.want)
+		}
+	}
+}
+
+// TestOddKeyValueCount pins slog's convention for an orphan key: no panic, no
+// dropped envelope, orphan rendered under slog's !BADKEY marker.
+func TestOddKeyValueCount(t *testing.T) {
+	const (
+		orphan   = "orphan"
+		badKey   = "!BADKEY"
+		realMsg  = "x"
+		wantKeys = 5
+	)
+
+	var buf bytes.Buffer
+	Init(&buf)
+
+	With(orphan).Info(realMsg)
+
+	line := readOneLine(t, &buf)
+	m := parseJSONLine(t, line)
+
+	// Envelope is intact.
+	assertField(t, line, keyLevel, lvlInfo)
+	assertField(t, line, keyMsg, realMsg)
+	if got := asString(m[keyCaller]); !regexp.MustCompile(callerRe).MatchString(got) {
+		t.Fatalf("caller missing or malformed: %q", got)
+	}
+	if _, ok := m[keyTs]; !ok {
+		t.Fatalf("missing %s; line=%s", keyTs, line)
+	}
+
+	assertField(t, line, badKey, orphan)
+	if len(m) != wantKeys {
+		t.Fatalf("expected %d keys, got %d: %v", wantKeys, len(m), m)
+	}
+}
+
+// TestOddKeyValueCountTrailingOrphan covers a valid pair followed by an orphan.
+func TestOddKeyValueCountTrailingOrphan(t *testing.T) {
+	const orphan = "orphan"
+
+	var buf bytes.Buffer
+	Init(&buf)
+
+	With(kvKey, kvVal, orphan).Info(msgHello)
+
+	line := readOneLine(t, &buf)
+	m := parseJSONLine(t, line)
+	if got, ok := m[kvKey].(float64); !ok || int(got) != kvVal {
+		t.Fatalf("expected %s=%d, got %v; line=%s", kvKey, kvVal, m[kvKey], line)
+	}
+	assertField(t, line, keyMsg, msgHello)
+}
+
 // ---- levels ----
 
 func TestSetLevelFiltering(t *testing.T) {

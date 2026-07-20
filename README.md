@@ -72,6 +72,23 @@ were added:
 {"caller":"api.handler.go line 42","level":"WARN","msg":"slow response","ts":"2026-03-03T10:50:25.389260945-08:00","request_id":"abc123","route":"/v1/users"}
 ```
 
+The envelope always wins. A `With` key that collides with `caller`, `level`,
+`msg`, or `ts` is renamed with an `attr_` prefix, so a line never carries
+duplicate JSON keys and the envelope can't be spoofed:
+
+```go
+xlog.With("level", "fake").Info("real")
+// {"caller":"...","level":"INFO","msg":"real","ts":"...","attr_level":"fake"}
+```
+
+An odd number of arguments to `With` follows `log/slog`: the orphan is emitted
+under the `!BADKEY` marker rather than panicking or dropping the line.
+
+```go
+xlog.With("orphan").Info("x")
+// {"caller":"...","level":"INFO","msg":"x","ts":"...","!BADKEY":"orphan"}
+```
+
 Caller behavior:
 
 - When called from `main`, `caller` points at your `main.go`.
