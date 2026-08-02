@@ -1,3 +1,5 @@
+// Package samplepkg exercises xlog from outside the xlog package, so the
+// caller attribute it records resolves to this file rather than to xlog itself.
 package samplepkg
 
 import (

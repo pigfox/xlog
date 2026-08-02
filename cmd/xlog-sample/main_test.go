@@ -20,7 +20,9 @@ func TestMainEmitsLogs(t *testing.T) {
 
 	main()
 
-	_ = w.Close()
+	if err := w.Close(); err != nil {
+		t.Fatalf("close pipe writer: %v", err)
+	}
 
 	sc := bufio.NewScanner(r)
 
@@ -32,13 +34,19 @@ func TestMainEmitsLogs(t *testing.T) {
 		if err := json.Unmarshal(sc.Bytes(), &m); err != nil {
 			t.Fatalf("json: %v; line=%s", err, sc.Text())
 		}
-		if lvl, _ := m["level"].(string); lvl == "" {
+		lvl, ok := m["level"].(string)
+		if !ok || lvl == "" {
 			t.Fatalf("missing level; line=%s", sc.Text())
 		}
-		if msg, _ := m["msg"].(string); strings.Contains(msg, "samplepkg") {
+		msg, ok := m["msg"].(string)
+		if !ok {
+			t.Fatalf("missing msg; line=%s", sc.Text())
+		}
+		if strings.Contains(msg, "samplepkg") {
 			seenSample = true
 		}
-		if caller, _ := m["caller"].(string); caller == "" {
+		caller, ok := m["caller"].(string)
+		if !ok || caller == "" {
 			t.Fatalf("missing caller; line=%s", sc.Text())
 		}
 	}
