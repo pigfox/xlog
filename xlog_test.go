@@ -17,7 +17,7 @@ const (
 	keyCaller = "caller"
 	keyLevel  = "level"
 	keyMsg    = "msg"
-	keyTs     = "ts"
+	keyTS     = "ts"
 
 	lvlDebug = "DEBUG"
 	lvlInfo  = "INFO"
@@ -68,7 +68,7 @@ func TestV0ByteCompatibility(t *testing.T) {
 	}
 
 	// Key order is part of the contract.
-	assertKeyOrder(t, lines[0], keyCaller, keyLevel, keyMsg, keyTs)
+	assertKeyOrder(t, lines[0], keyCaller, keyLevel, keyMsg, keyTS)
 
 	assertField(t, lines[0], keyLevel, lvlInfo)
 	assertField(t, lines[0], keyMsg, msgHello)
@@ -184,7 +184,7 @@ func TestLoggerMethods(t *testing.T) {
 				t.Fatalf("expected %s=%d, got %v (line=%s)", kvKey, kvVal, m[kvKey], line)
 			}
 			// Envelope keys stay first and in order.
-			assertKeyOrder(t, line, keyCaller, keyLevel, keyMsg, keyTs, kvKey)
+			assertKeyOrder(t, line, keyCaller, keyLevel, keyMsg, keyTS, kvKey)
 		})
 	}
 }
@@ -203,7 +203,7 @@ func TestWithChaining(t *testing.T) {
 	if got := asString(m[kvKey2]); got != kvVal2 {
 		t.Fatalf("expected %s=%q, got %q", kvKey2, kvVal2, got)
 	}
-	assertKeyOrder(t, line, keyCaller, keyLevel, keyMsg, keyTs, kvKey, kvKey2)
+	assertKeyOrder(t, line, keyCaller, keyLevel, keyMsg, keyTS, kvKey, kvKey2)
 }
 
 // TestWithNoAttrsReusesHandler covers the empty-attrs short circuit in
@@ -215,7 +215,7 @@ func TestWithNoAttrsReusesHandler(t *testing.T) {
 	With().Info(msgHello)
 
 	line := readOneLine(t, &buf)
-	assertKeyOrder(t, line, keyCaller, keyLevel, keyMsg, keyTs)
+	assertKeyOrder(t, line, keyCaller, keyLevel, keyMsg, keyTS)
 	m := parseJSONLine(t, line)
 	if len(m) != 4 {
 		t.Fatalf("expected exactly 4 keys, got %d: %v", len(m), m)
@@ -258,18 +258,18 @@ func TestReservedKeysDoNotClobberEnvelope(t *testing.T) {
 		attrLevel  = attrPrefix + keyLevel
 		attrMsg    = attrPrefix + keyMsg
 		attrCaller = attrPrefix + keyCaller
-		attrTs     = attrPrefix + keyTs
+		attrTS     = attrPrefix + keyTS
 	)
 
 	var buf bytes.Buffer
 	Init(&buf)
 
-	With(keyLevel, fakeLevel, keyMsg, spoofMsg, keyCaller, hax, keyTs, hax).Info(realMsg)
+	With(keyLevel, fakeLevel, keyMsg, spoofMsg, keyCaller, hax, keyTS, hax).Info(realMsg)
 
 	line := readOneLine(t, &buf)
 
 	// No key may appear twice in the raw line.
-	for _, k := range []string{keyCaller, keyLevel, keyMsg, keyTs} {
+	for _, k := range []string{keyCaller, keyLevel, keyMsg, keyTS} {
 		if got := strings.Count(line, `"`+k+`":`); got != 1 {
 			t.Fatalf("key %q appears %d times, want 1; line=%s", k, got, line)
 		}
@@ -286,9 +286,9 @@ func TestReservedKeysDoNotClobberEnvelope(t *testing.T) {
 	assertField(t, line, attrLevel, fakeLevel)
 	assertField(t, line, attrMsg, spoofMsg)
 	assertField(t, line, attrCaller, hax)
-	assertField(t, line, attrTs, hax)
+	assertField(t, line, attrTS, hax)
 
-	assertKeyOrder(t, line, keyCaller, keyLevel, keyMsg, keyTs, attrLevel, attrMsg)
+	assertKeyOrder(t, line, keyCaller, keyLevel, keyMsg, keyTS, attrLevel, attrMsg)
 }
 
 // TestNonReservedKeysAreNotRenamed guards against over-eager prefixing.
@@ -313,7 +313,7 @@ func TestReserved(t *testing.T) {
 		{keyCaller, true},
 		{keyLevel, true},
 		{keyMsg, true},
-		{keyTs, true},
+		{keyTS, true},
 		{kvKey, false},
 		{attrPrefix + keyLevel, false},
 	}
@@ -348,8 +348,8 @@ func TestOddKeyValueCount(t *testing.T) {
 	if got := asString(m[keyCaller]); !regexp.MustCompile(callerRe).MatchString(got) {
 		t.Fatalf("caller missing or malformed: %q", got)
 	}
-	if _, ok := m[keyTs]; !ok {
-		t.Fatalf("missing %s; line=%s", keyTs, line)
+	if _, ok := m[keyTS]; !ok {
+		t.Fatalf("missing %s; line=%s", keyTS, line)
 	}
 
 	assertField(t, line, badKey, orphan)
@@ -587,12 +587,12 @@ func TestConcurrentUse(t *testing.T) {
 	Init(&lockedBuffer{mu: &mu})
 
 	var wg sync.WaitGroup
-	for i := 0; i < goroutines; i++ {
+	for i := range goroutines {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
 			logger := With(kvKey, i)
-			for j := 0; j < iterations; j++ {
+			for range iterations {
 				Info(msgHello)
 				Error(errors.New(msgBoom))
 				logger.Warn(msgHello)

@@ -141,3 +141,33 @@ go test ./... -race
 ```
 
 Or use `./tests.sh` (enforces 100% coverage).
+
+## Design notes
+
+### The logging API is context-free on purpose
+
+`Info`, `Infof`, `Warn`, `Warn2`, `Error`, `Error2` and `Errorf` — and the same
+methods on `Logger` — take a message, never a `context.Context`. That is a
+deliberate design position, not an omission.
+
+It mirrors the standard library. `slog.Logger.Info` is also context-free, and
+`log/slog` closes the gap the same way xlog does: it calls
+`context.Background()` internally before handing the record to the handler.
+xlog's handler then ignores the context outright — `Handle` takes it as `_` —
+so no behaviour observable to a caller depends on it.
+
+The consequence is that `emit` calls `context.Background()`, which house lint
+rules forbid in library code on the grounds that a context should be threaded
+from `main`. That rule targets application code, where a context carries
+cancellation and deadlines that matter. A logger has neither: there is no
+request to cancel and no deadline to honor, and adding a `ctx` parameter would
+change every call site in every consumer to buy nothing. The single
+`//nolint:forbidigo` in this package marks that decision at the one line where
+it applies.
+
+If you need per-request context in your log lines, attach it as data rather
+than as control flow:
+
+```go
+xlog.With("request_id", reqID).Info("handling request")
+```

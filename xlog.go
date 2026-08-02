@@ -65,8 +65,17 @@ func get() *slog.Logger {
 }
 
 // emit writes msg at lvl, attaching the caller of the exported entry point.
+//
+// The context here is deliberate and not an oversight. xlog's public API is
+// ctx-free by design (see "Design notes" in README.md): Info, Warn and Error
+// take a message, not a context, exactly as the standard library's
+// slog.Logger.Info does — and slog resolves that same gap the same way, by
+// calling context.Background() internally before handing the record to its
+// handler. xlog's handler ignores the context entirely (Handle takes it as _),
+// so nothing observable depends on it. Threading a context in would change
+// every call site in every consumer to buy nothing.
 func emit(l *slog.Logger, lvl Level, msg string) {
-	l.LogAttrs(context.Background(), lvl, msg, callerAttr())
+	l.LogAttrs(context.Background(), lvl, msg, callerAttr()) //nolint:forbidigo // ctx-free logging API by design, mirroring slog.Logger.Info; the handler ignores ctx
 }
 
 // prefixed joins prefix and err.Error() the way Error2 has always done.
@@ -194,10 +203,7 @@ func callerAttr() slog.Attr {
 
 func callerFileLine() (string, int) {
 	pcs := make([]uintptr, 32)
-	// Skip 0: runtime.Callers, 1: callerFileLine, 2: callerAttr, 3: emit.
-	// Remaining xlog frames are dropped by name below, so wrapper methods on
-	// Logger resolve to the same caller as the package-level functions.
-	n := runtime.Callers(4, pcs)
+	n := runtime.Callers(callerSkip, pcs)
 	return firstNonXlogFrame(pcs[:n])
 }
 
@@ -306,10 +312,16 @@ func encodeLine(attrs []slog.Attr) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// quoteKey JSON-quotes an object key. Marshalling a string cannot fail, so
-// the error is discarded.
+// quoteKey JSON-quotes an object key. Marshaling a *string* cannot fail — the
+// only errors json.Marshal reports are for unsupported types, cycles and
+// failing MarshalJSON methods, none of which a string can hit. The error is
+// therefore bound and dropped explicitly rather than left to a blank result,
+// and no branch is written for a case that cannot occur and so could never be
+// covered by a test. Values, which genuinely can fail, are checked in
+// encodeLine.
 func quoteKey(k string) []byte {
-	b, _ := json.Marshal(k)
+	b, err := json.Marshal(k)
+	_ = err
 	return b
 }
 
