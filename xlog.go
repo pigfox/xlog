@@ -87,6 +87,14 @@ func prefixed(prefix string, err error) string {
 	return msg
 }
 
+// Debug logs a diagnostic message. LevelDebug has been accepted by SetLevel
+// since v1.0.0, but until v1.1.0 nothing could emit at it — the level could be
+// selected and never reached. Debug closes that gap.
+func Debug(msg string) { emit(get(), LevelDebug, msg) }
+
+// Debugf logs a formatted diagnostic message.
+func Debugf(format string, a ...any) { emit(get(), LevelDebug, fmt.Sprintf(format, a...)) }
+
 // Info logs an informational message.
 func Info(msg string) { emit(get(), LevelInfo, msg) }
 
@@ -140,6 +148,12 @@ func With(kv ...any) *Logger {
 
 // With returns a Logger with additional key/value pairs appended.
 func (g *Logger) With(kv ...any) *Logger { return &Logger{l: g.l.With(kv...)} }
+
+// Debug logs a diagnostic message.
+func (g *Logger) Debug(msg string) { emit(g.l, LevelDebug, msg) }
+
+// Debugf logs a formatted diagnostic message.
+func (g *Logger) Debugf(format string, a ...any) { emit(g.l, LevelDebug, fmt.Sprintf(format, a...)) }
 
 // Info logs an informational message.
 func (g *Logger) Info(msg string) { emit(g.l, LevelInfo, msg) }

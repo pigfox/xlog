@@ -42,6 +42,8 @@ func main() {
 | --- | --- | --- |
 | `Init(w io.Writer)` | — | nil → stdout |
 | `SetLevel(l Level)` | — | safe to call concurrently with logging |
+| `Debug(msg string)` | DEBUG | silent unless `SetLevel(LevelDebug)` |
+| `Debugf(format string, a ...any)` | DEBUG | silent unless `SetLevel(LevelDebug)` |
 | `Info(msg string)` | INFO | |
 | `Infof(format string, a ...any)` | INFO | |
 | `Warn(msg string)` | WARN | |
@@ -54,8 +56,8 @@ func main() {
 `Level` aliases `slog.Level`; the constants are `LevelDebug`, `LevelInfo`,
 `LevelWarn`, `LevelError`.
 
-`*Logger` has the same methods — `Info`, `Infof`, `Warn`, `Warn2`, `Error`,
-`Error2`, `Errorf` — plus `With` for further chaining.
+`*Logger` has the same methods — `Debug`, `Debugf`, `Info`, `Infof`, `Warn`,
+`Warn2`, `Error`, `Error2`, `Errorf` — plus `With` for further chaining.
 
 ## Output format
 
@@ -119,6 +121,15 @@ matches v0 (everything v0 could emit was INFO or ERROR). Calling
 `SetLevel(LevelWarn)` or higher will suppress `Info` calls that previously
 always emitted.
 
+### v1.1.0 — `Debug`
+
+`LevelDebug` has been accepted by `SetLevel` since v1.0.0, but nothing could
+emit at it: the level could be selected and never reached. `Debug`, `Debugf`
+and the matching `Logger` methods close that gap. They are additive — no
+existing signature or output byte changes — and they stay silent at the default
+`LevelInfo`, so a caller may leave `Debug` lines in place and pay nothing for
+them until someone selects the level.
+
 ## Run sample program
 
 ```bash
@@ -146,9 +157,9 @@ Or use `./tests.sh` (enforces 100% coverage).
 
 ### The logging API is context-free on purpose
 
-`Info`, `Infof`, `Warn`, `Warn2`, `Error`, `Error2` and `Errorf` — and the same
-methods on `Logger` — take a message, never a `context.Context`. That is a
-deliberate design position, not an omission.
+`Debug`, `Debugf`, `Info`, `Infof`, `Warn`, `Warn2`, `Error`, `Error2` and
+`Errorf` — and the same methods on `Logger` — take a message, never a
+`context.Context`. That is a deliberate design position, not an omission.
 
 It mirrors the standard library. `slog.Logger.Info` is also context-free, and
 `log/slog` closes the gap the same way xlog does: it calls

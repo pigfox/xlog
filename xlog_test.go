@@ -430,6 +430,72 @@ func TestSetLevelReenables(t *testing.T) {
 	}
 }
 
+// TestDebugEmits covers the four Debug entry points added in v1.1.0. Each runs
+// at LevelDebug, because the default level is LevelInfo and a Debug line is
+// filtered there — which is the whole point of the level and is asserted
+// separately by TestDebugSuppressedAtDefaultLevel below.
+func TestDebugEmits(t *testing.T) {
+	defer SetLevel(LevelInfo)
+
+	tests := []struct {
+		name    string
+		call    func()
+		wantMsg string
+	}{
+		{"Debug", func() { Debug(msgHello) }, msgHello},
+		{"Debugf", func() { Debugf(fmtCount, argCount) }, fmtCounted},
+		{"LoggerDebug", func() { With(kvKey, kvVal).Debug(msgHello) }, msgHello},
+		{"LoggerDebugf", func() { With(kvKey, kvVal).Debugf(fmtCount, argCount) }, fmtCounted},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			Init(&buf)
+			SetLevel(LevelDebug)
+			tt.call()
+
+			m := parseJSONLine(t, readOneLine(t, &buf))
+			if got := asString(m[keyLevel]); got != lvlDebug {
+				t.Fatalf("level: got %q, want %q", got, lvlDebug)
+			}
+			if got := asString(m[keyMsg]); got != tt.wantMsg {
+				t.Fatalf("msg: got %q, want %q", got, tt.wantMsg)
+			}
+			if got := asString(m[keyCaller]); !regexp.MustCompile(callerRe).MatchString(got) {
+				t.Fatalf("caller format unexpected: %q", got)
+			}
+		})
+	}
+}
+
+// TestDebugSuppressedAtDefaultLevel is the half that makes Debug worth having:
+// a caller may leave Debug lines in place and pay nothing for them until
+// someone selects the level. Before v1.1.0 LevelDebug could be set and never
+// reached, so this direction had nothing to assert.
+func TestDebugSuppressedAtDefaultLevel(t *testing.T) {
+	defer SetLevel(LevelInfo)
+
+	var buf bytes.Buffer
+	Init(&buf)
+	SetLevel(LevelInfo)
+
+	Debug(msgHello)
+	Debugf(fmtCount, argCount)
+	With(kvKey, kvVal).Debug(msgHello)
+	With(kvKey, kvVal).Debugf(fmtCount, argCount)
+	if buf.Len() != 0 {
+		t.Fatalf("Debug must be silent at LevelInfo, got %q", buf.String())
+	}
+
+	// Positive anchor: the same writer is live, so the emptiness above is
+	// filtering rather than a dead logger.
+	Info(msgHello)
+	if buf.Len() == 0 {
+		t.Fatal("Info at LevelInfo emitted nothing; the assertion above was vacuous")
+	}
+}
+
 func TestLevelConstsMatchSlog(t *testing.T) {
 	tests := []struct {
 		level Level
